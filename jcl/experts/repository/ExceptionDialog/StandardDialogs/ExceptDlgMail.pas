@@ -261,8 +261,8 @@ begin
   with TJclEmail.Create do
   try
     ParentWnd := Application.Handle;
-    Recipients.Add('name@domain.ext');
-    Subject := 'email subject';
+    Recipients.Add('support@geomix.ru');
+    Subject := 'Bug Report';
     Body := AnsiString(ReportAsText);
     SaveTaskWindows;
     try
