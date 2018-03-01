@@ -227,6 +227,7 @@ type
     Segment: Word;
     VA: DWORD; // VA relative to (module base address + $10000)
     LineNumber: Integer;
+    UnitName: PJclMapString;
   end;
 
   TJclMapScanner = class(TJclAbstractMapParser)
@@ -239,6 +240,7 @@ type
     FLineNumbersCnt: Integer;
     FLineNumberErrors: Integer;
     FNewUnitFileName: PJclMapString;
+    FCurrentUnitName: PJclMapString;
     FProcNamesCnt: Integer;
     FSegmentCnt: Integer;
     FLastAccessedSegementIndex: Integer;
@@ -254,6 +256,7 @@ type
     procedure LineNumbersItem(LineNumber: Integer; const Address: TJclMapAddress); override;
     procedure LineNumberUnitItem(UnitName, UnitFileName: PJclMapString); override;
     procedure Scan;
+    function GetLineNumberByIndex(Index: Integer): TJCLMapLineNumber;
   public
     constructor Create(const MapFileName: TFileName; Module: HMODULE); override;
 
@@ -270,6 +273,8 @@ type
     function ProcNameFromAddr(Addr: DWORD; out Offset: Integer): string; overload;
     function SourceNameFromAddr(Addr: DWORD): string;
     property LineNumberErrors: Integer read FLineNumberErrors;
+    property LineNumbersCnt: Integer read FLineNumbersCnt;
+    property LineNumberByIndex[Index: Integer]: TJclMapLineNumber read GetLineNumberByIndex;
   end;
 
 type
@@ -555,6 +560,9 @@ type
 
 // Source location functions
 function Caller(Level: Integer = 0; FastStackWalk: Boolean = False): Pointer;
+
+procedure BeginGetLocationInfoCache;
+procedure EndGetLocationInfoCache;
 
 function GetLocationInfo(const Addr: Pointer): TJclLocationInfo; overload;
 function GetLocationInfo(const Addr: Pointer; out Info: TJclLocationInfo): Boolean; overload;
@@ -1092,10 +1100,10 @@ uses
 
 const
   ModuleCodeOffset = $1000;
-  
+
 var
   HexMap: array[AnsiChar] of Byte;
-  
+
 {$STACKFRAMES OFF}
 
 function GetFramePointer: Pointer;
@@ -1960,6 +1968,7 @@ begin
     FLineNumbers[FLineNumbersCnt].Segment := FSegmentClasses[SegIndex].Segment;
     FLineNumbers[FLineNumbersCnt].VA := VA;
     FLineNumbers[FLineNumbersCnt].LineNumber := LineNumber;
+    FLineNumbers[FLineNumbersCnt].UnitName := FCurrentUnitName;
     Inc(FLineNumbersCnt);
     Added := True;
     if FNewUnitFileName <> nil then
@@ -1980,6 +1989,12 @@ end;
 procedure TJclMapScanner.LineNumberUnitItem(UnitName, UnitFileName: PJclMapString);
 begin
   FNewUnitFileName := UnitFileName;
+  FCurrentUnitName := UnitName;
+end;
+
+function TJclMapScanner.GetLineNumberByIndex(Index: Integer): TJCLMapLineNumber;
+begin
+  Result := FLineNumbers[Index];
 end;
 
 function TJclMapScanner.IndexOfSegment(Addr: DWORD): Integer;
@@ -3606,7 +3621,7 @@ begin
   begin
     if IncludeVAddress then
     begin
-      OffsetStr :=  Format('(%p) ', [VAddress]);
+      OffsetStr := Format('(%p) ', [VAddress]);
       Result := OffsetStr + Result;
     end;
     if IncludeModuleName then
@@ -3789,7 +3804,7 @@ var
   Item: TJclDebugInfoSource;
 begin
   ResetMemory(Info, SizeOf(Info));
-  Item := ItemFromModule[ModuleFromAddr(Addr)];
+  Item := ItemFromModule[CachedModuleFromAddr(Addr)];
   if Item <> nil then
     Result := Item.GetLocationInfo(Addr, Info)
   else
@@ -4555,6 +4570,16 @@ end;
 {$STACKFRAMES OFF}
 {$ENDIF ~STACKFRAMES_ON}
 
+procedure BeginGetLocationInfoCache;
+begin
+  BeginModuleFromAddrCache;
+end;
+
+procedure EndGetLocationInfoCache;
+begin
+  EndModuleFromAddrCache;
+end;
+
 function GetLocationInfo(const Addr: Pointer): TJclLocationInfo;
 begin
   try
@@ -4591,7 +4616,7 @@ function GetLocationInfoStr(const Addr: Pointer; IncludeModuleName, IncludeAddre
 var
   Info, StartProcInfo: TJclLocationInfo;
   OffsetStr, StartProcOffsetStr, FixedProcedureName, UnitNameWithoutUnitscope: string;
-  Module : HMODULE;
+  Module: HMODULE;
 begin
   OffsetStr := '';
   if GetLocationInfo(Addr, Info) then
@@ -4702,7 +4727,7 @@ begin
   end;
 end;
 
-  function LineByLevel(const Level: Integer): Integer;
+function LineByLevel(const Level: Integer): Integer;
 begin
   Result := GetLocationInfo(Caller(Level + 1)).LineNumber;
 end;
@@ -5470,9 +5495,14 @@ begin
   ForceStackTracing;
   Strings.BeginUpdate;
   try
-    for I := 0 to Count - 1 do
-      Strings.Add(GetLocationInfoStr(Items[I].CallerAddr, IncludeModuleName, IncludeAddressOffset,
-        IncludeStartProcLineOffset, IncludeVAddress));
+    BeginGetLocationInfoCache;
+    try
+      for I := 0 to Count - 1 do
+        Strings.Add(GetLocationInfoStr(Items[I].CallerAddr, IncludeModuleName, IncludeAddressOffset,
+          IncludeStartProcLineOffset, IncludeVAddress));
+    finally
+      EndGetLocationInfoCache;
+    end;
   finally
     Strings.EndUpdate;
   end;
