@@ -1317,8 +1317,7 @@ end;
 function ArcTan(X: Float): Float;
 begin
   {$IFDEF USE_MATH_UNIT}
-  System.Error(rePlatformNotImplemented);
-  Result := NaN; 
+  Result := System.Math.ArcTan2(X, 1);
   {$ELSE ~USE_MATH_UNIT}
   asm
           FLD     X
@@ -1362,8 +1361,7 @@ function Cos(X: Float): Float;
 begin
   DomainCheck(Abs(X) > MaxAngle);
   {$IFDEF USE_MATH_UNIT}
-  System.Error(rePlatformNotImplemented);
-  Result := NaN;
+  Result := System.Cos(X);
   {$ELSE ~USE_MATH_UNIT}
   asm
           FLD     X
@@ -1441,8 +1439,7 @@ begin
   DomainCheck(Abs(X) > MaxAngle);
   {$ENDIF ~MATH_EXT_SPECIALVALUES}
   {$IFDEF USE_MATH_UNIT}
-  System.Error(rePlatformNotImplemented);
-  Result := NaN;
+  Result := System.Sin(X);
   {$ELSE ~USE_MATH_UNIT}
   asm
           FLD     X
